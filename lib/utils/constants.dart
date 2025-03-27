@@ -9,3 +9,5 @@ class AppStrings {
   static const String documentId = 'Document ID';
   static const String processing = 'Processing...';
 }
+
+const String CONTRACT_ADDRESS = "0xYourContractAddressHere"; // Replace with your actual contract address

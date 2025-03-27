@@ -2,42 +2,35 @@ import 'package:flutter/services.dart';
 import 'package:web3dart/web3dart.dart';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/io.dart';
+import 'dart:convert';
 
 class ContractService {
   static const String rpcUrl = 'http://127.0.0.1:7545'; // Ganache RPC URL
   static const String wsUrl = 'ws://127.0.0.1:7545';
   static const String privateKey = '0xb4bb9508c8faa1c53a5d8c2a3d0dcaaa1a402100305ce89a88ae82effd86db86'; // Replace with your private key
 
-  late Web3Client _web3client;
+  final Web3Client _client;
+  final DeployedContract _contract;
   late String _abiCode;
   late EthereumAddress _contractAddress;
   late Credentials _credentials;
-  late DeployedContract _contract;
   late ContractFunction _registerDocument;
   late ContractFunction _verifyDocument;
 
-  ContractService() {
+  ContractService(this._client, this._contract) {
     initialSetup();
   }
 
   Future<void> initialSetup() async {
-    // Initialize Web3Client
-    _web3client = Web3Client(
-      rpcUrl,
-      http.Client(),
-      socketConnector: () => IOWebSocketChannel.connect(wsUrl).cast<String>(),
-    );
-
     // Get contract ABI and address
     await getAbi();
     await getCredentials();
-    await getDeployedContract();
   }
 
   Future<void> getAbi() async {
     // Read the contract ABI
     String abiStringFile = await rootBundle.loadString('assets/DocumentVerification.json');
-    _contractAddress = EthereumAddress.fromHex('YOUR_CONTRACT_ADDRESS'); // Replace with your contract address
+    _contractAddress = EthereumAddress.fromHex('0x00d96B8ed99E154e676355c553482FD692A97c67'); // Replace with your contract address
     _abiCode = abiStringFile;
   }
 
@@ -45,22 +38,10 @@ class ContractService {
     _credentials = EthPrivateKey.fromHex(privateKey);
   }
 
-  Future<void> getDeployedContract() async {
-    // Get the contract
-    _contract = DeployedContract(
-      ContractAbi.fromJson(_abiCode, 'DocumentVerification'),
-      _contractAddress,
-    );
-
-    // Get contract functions
-    _registerDocument = _contract.function('registerDocument');
-    _verifyDocument = _contract.function('verifyDocument');
-  }
-
   Future<String> registerDocument(String hash, String title) async {
     try {
       // Call the register document function
-      final result = await _web3client.sendTransaction(
+      final result = await _client.sendTransaction(
         _credentials,
         Transaction.callContract(
           contract: _contract,
@@ -78,7 +59,7 @@ class ContractService {
   Future<bool> verifyDocument(String documentId) async {
     try {
       // Call the verify document function
-      final result = await _web3client.call(
+      final result = await _client.call(
         contract: _contract,
         function: _verifyDocument,
         params: [documentId],
@@ -89,7 +70,25 @@ class ContractService {
     }
   }
 
+  Future<List<dynamic>> getDocument(String hash) async {
+    try {
+      // Get the function from the contract
+      final function = _contract.function('getDocument');
+      
+      // Call the function
+      final result = await _client.call(
+        contract: _contract,
+        function: function,
+        params: [hash],
+      );
+      
+      return result;
+    } catch (e) {
+      throw Exception('Failed to get document: $e');
+    }
+  }
+
   void dispose() {
-    _web3client.dispose();
+    _client.dispose();
   }
 }

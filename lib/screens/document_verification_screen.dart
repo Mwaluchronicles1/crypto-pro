@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/document_service.dart';
 import '../utils/constants.dart';
 
-// Make sure the path matches your project structure
 class DocumentVerificationScreen extends StatefulWidget {
   const DocumentVerificationScreen({super.key});
 
@@ -16,12 +15,22 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
   final _titleController = TextEditingController();
   final _documentIdController = TextEditingController();
 
-  List<Map<String, String>> verificationHistory = [];
+  List<Map<String, dynamic>> verificationHistory = [];
+  Map<String, dynamic>? _selectedDocument;
 
   bool _isUploading = false;
   bool _isVerifying = false;
+  bool _isFetching = false;
 
   final DocumentService _documentService = DocumentService();
+
+  @override
+  void dispose() {
+    _hashController.dispose();
+    _titleController.dispose();
+    _documentIdController.dispose();
+    super.dispose();
+  }
 
   void _showSnackBar(String message, bool isError) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -29,7 +38,6 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
         content: Text(message),
         backgroundColor: isError ? Colors.red : Colors.green,
         behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(8),
       ),
     );
   }
@@ -44,14 +52,19 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
           title: _titleController.text,
         );
 
+        final document = {
+          'hash': _hashController.text,
+          'title': _titleController.text,
+          'status': 'Registered',
+          'timestamp': DateTime.now().toIso8601String(),
+          'verified': false,
+        };
+
         setState(() {
-          verificationHistory.add({
-            'title': _titleController.text,
-            'status': 'Registered on Blockchain',
-          });
+          verificationHistory.insert(0, document);
         });
 
-        _showSnackBar('Document registered on blockchain successfully', false);
+        _showSnackBar('Document registered successfully', false);
         _titleController.clear();
         _hashController.clear();
       } catch (e) {
@@ -64,27 +77,35 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
 
   Future<void> _handleVerification() async {
     if (_documentIdController.text.isEmpty) {
-      _showSnackBar(AppStrings.enterDocumentId, true);
+      _showSnackBar('Please enter a document ID', true);
       return;
     }
 
     setState(() => _isVerifying = true);
 
     try {
-      final isVerified = await _documentService.verifyDocument(_documentIdController.text);
+      final isVerified = await _documentService.verifyDocument(
+        _documentIdController.text,
+        approved: true, // Set based on your verification logic
+        hash: _documentIdController.text,
+        reason: 'Manual verification', // Set appropriate reason
+      );
+
+      final updatedDoc = {
+        'hash': _documentIdController.text,
+        'status': isVerified ? 'Verified' : 'Rejected',
+        'timestamp': DateTime.now().toIso8601String(),
+        'verified': isVerified,
+      };
 
       setState(() {
-        verificationHistory.add({
-          'title': 'Document ${_documentIdController.text}',
-          'status': isVerified ? 'Verified on Blockchain' : 'Not Found',
-        });
+        verificationHistory.insert(0, updatedDoc);
       });
 
       _showSnackBar(
-        isVerified ? 'Document verified on blockchain' : 'Document not found',
+        isVerified ? 'Document verified' : 'Document rejected',
         !isVerified,
       );
-      _documentIdController.clear();
     } catch (e) {
       _showSnackBar('Failed to verify document: ${e.toString()}', true);
     } finally {
@@ -92,210 +113,201 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Scaffold(
-          backgroundColor: const Color(0xFF1E1E1E),
-          appBar: AppBar(
-            title: const Text('Document Verification Platform'),
-            backgroundColor: const Color(0xFF2C2C2C),
-          ),
-          body: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Upload Section
-                Card(
-                  color: const Color(0xFF2C2C2C),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Upload Document',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _hashController,
-                            decoration: const InputDecoration(
-                              labelText: 'Document Hash',
-                              labelStyle: TextStyle(color: Colors.grey),
-                              enabledBorder: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.grey),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.blue),
-                              ),
-                            ),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _titleController,
-                            decoration: const InputDecoration(
-                              labelText: 'Document Title',
-                              labelStyle: TextStyle(color: Colors.grey),
-                              enabledBorder: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.grey),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.blue),
-                              ),
-                            ),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: _isUploading ? null : _handleUpload,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                            ),
-                            child: _isUploading
-                                ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                                : const Text('Upload Document'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
+  Future<void> _showDocumentDetails(String hash) async {
+    setState(() {
+      _isFetching = true;
+      _selectedDocument = null;
+    });
 
-                // Verification Section
-                Card(
-                  color: const Color(0xFF2C2C2C),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Verify Document',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _documentIdController,
-                          decoration: const InputDecoration(
-                            labelText: 'Document ID',
-                            labelStyle: TextStyle(color: Colors.grey),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(color: Colors.grey),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(color: Colors.blue),
-                            ),
-                          ),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _isVerifying ? null : _handleVerification,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                          ),
-                          child: _isVerifying
-                              ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                              : const Text('Verify Document'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
+    try {
+      final details = await _documentService.getDocument(hash);
+      setState(() => _selectedDocument = details);
 
-                // Status Display Section
-                const Text(
-                  'Verification History',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: verificationHistory.length,
-                    itemBuilder: (context, index) {
-                      return Card(
-                        color: const Color(0xFF2C2C2C),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(
-                            verificationHistory[index]['title'] ?? '',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          subtitle: Text(
-                            verificationHistory[index]['status'] ?? '',
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                          trailing: Icon(
-                            verificationHistory[index]['status'] == 'Verified on Blockchain'
-                                ? Icons.check_circle
-                                : Icons.error,
-                            color: verificationHistory[index]['status'] == 'Verified on Blockchain'
-                                ? Colors.green
-                                : Colors.red,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
+      showDialog(
+        context: context,
+        builder: (context) => _buildDocumentDialog(details),
+      );
+    } catch (e) {
+      _showSnackBar('Failed to fetch document details', true);
+    } finally {
+      setState(() => _isFetching = false);
+    }
+  }
+
+  Widget _buildDocumentDialog(Map<String, dynamic> doc) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      title: const Text('Document Details', style: TextStyle(color: Colors.white)),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildDetailItem('Hash:', doc['hash'] ?? ''),
+            _buildDetailItem('Title:', doc['title'] ?? ''),
+            _buildDetailItem('Owner:', doc['owner']?.toString() ?? ''),
+            _buildDetailItem('Timestamp:',
+                DateTime.tryParse(doc['timestamp']?.toString() ?? '')?.toLocal().toString() ?? ''),
+            _buildDetailItem('Status:',
+                doc['verified'] == true ? 'Verified' : 'Not Verified'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailItem(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-        ),
-        if (_isUploading || _isVerifying)
-          Container(
-            color: Colors.black54,
-            child: const Center(
-              child: Card(
-                color: Color(0xFF2C2C2C),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryItem(int index) {
+    final item = verificationHistory[index];
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: const Color(0xFF2C2C2C),
+      child: InkWell(
+        onTap: () => _showDocumentDetails(item['hash']),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Icon(
+                item['verified'] == true ? Icons.check_circle : Icons.error,
+                color: item['verified'] == true ? Colors.green : Colors.red,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item['title'] ?? item['hash'],
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item['status'],
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 12,
+                      ),
+                    ),
+                    if (item['timestamp'] != null)
                       Text(
-                        'Processing...',
+                        '${DateTime.tryParse(item['timestamp'])?.toLocal().toString().split('.')[0]}',
                         style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 10,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.grey),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1E1E1E),
+      appBar: AppBar(
+        title: const Text('Document Verification'),
+        backgroundColor: const Color(0xFF2C2C2C),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Upload Section
+            Card(
+              color: const Color(0xFF2C2C2C),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Register Document',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                           color: Colors.white,
-                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _hashController,
+                        decoration: InputDecoration(
+                          labelText: 'Document Hash',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _titleController,
+                        decoration: InputDecoration(
+                          labelText: 'Document Title',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _isUploading ? null : _handleUpload,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: _isUploading
+                              ? const CircularProgressIndicator()
+                              : const Text('Register Document'),
                         ),
                       ),
                     ],
@@ -303,17 +315,97 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                 ),
               ),
             ),
-          ),
-      ],
-    );
-  }
+            const SizedBox(height: 20),
 
-  @override
-  void dispose() {
-    _hashController.dispose();
-    _titleController.dispose();
-    _documentIdController.dispose();
-    _documentService.dispose();
-    super.dispose();
+            // Verification Section
+            Card(
+              color: const Color(0xFF2C2C2C),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Verify Document',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _documentIdController,
+                      decoration: InputDecoration(
+                        labelText: 'Document Hash',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isVerifying ? null : _handleVerification,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: _isVerifying
+                                ? const CircularProgressIndicator()
+                                : const Text('Verify'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (_documentIdController.text.isNotEmpty) {
+                                _showDocumentDetails(_documentIdController.text);
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text('Details'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // History Section
+            const Text(
+              'Verification History',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: verificationHistory.length,
+              itemBuilder: (context, index) => _buildHistoryItem(index),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
