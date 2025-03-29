@@ -3,10 +3,18 @@ import 'package:provider/provider.dart';
 import '../services/wallet_service.dart';
 import '../services/document_service.dart';
 import '../widgets/wallet_connect_button.dart';
-import '../utils/constants.dart';
+import '../models/verification_status.dart';
+import '../models/document.dart';
 
 class DocumentVerificationScreen extends StatefulWidget {
-  const DocumentVerificationScreen({super.key});
+  final DocumentService documentService;
+  final WalletService walletService;
+
+  const DocumentVerificationScreen({
+    super.key,
+    required this.documentService,
+    required this.walletService,
+  });
 
   @override
   State<DocumentVerificationScreen> createState() => _DocumentVerificationScreenState();
@@ -16,24 +24,15 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
   final _formKey = GlobalKey<FormState>();
   final _hashController = TextEditingController();
   final _titleController = TextEditingController();
-  final _documentIdController = TextEditingController();
+  final _verifyHashController = TextEditingController();
 
   List<Map<String, dynamic>> verificationHistory = [];
-  Map<String, dynamic>? _selectedDocument;
-
-  bool _isUploading = false;
-  bool _isVerifying = false;
-  bool _isFetching = false;
-  bool _isLoading = false;
-  String? _error;
-
-  final DocumentService _documentService = DocumentService();
 
   @override
   void dispose() {
     _hashController.dispose();
     _titleController.dispose();
-    _documentIdController.dispose();
+    _verifyHashController.dispose();
     super.dispose();
   }
 
@@ -47,114 +46,126 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
     );
   }
 
-  Future<void> _handleUpload() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isUploading = true);
+  Future<void> _handleUpload(DocumentService documentService) async {
+    if (!_formKey.currentState!.validate()) return;
 
-      try {
-        await _documentService.uploadDocument(
-          hash: _hashController.text,
-          title: _titleController.text,
-        );
+    try {
+      final success = await documentService.uploadDocument(
+        hash: _hashController.text,
+        title: _titleController.text,
+      );
 
-        final document = {
-          'hash': _hashController.text,
-          'title': _titleController.text,
-          'status': 'Registered',
-          'timestamp': DateTime.now().toIso8601String(),
-          'verified': false,
-        };
-
+      if (success && mounted) {
         setState(() {
-          verificationHistory.insert(0, document);
+          verificationHistory.insert(0, {
+            'hash': _hashController.text,
+            'title': _titleController.text,
+            'status': 'Registered',
+            'timestamp': DateTime.now().toIso8601String(),
+            'verified': false,
+          });
         });
-
-        _showSnackBar('Document registered successfully', false);
         _titleController.clear();
         _hashController.clear();
-      } catch (e) {
-        _showSnackBar('Failed to register document: ${e.toString()}', true);
-      } finally {
-        setState(() => _isUploading = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
 
   Future<void> _handleVerification() async {
-    if (_documentIdController.text.isEmpty) {
-      _showSnackBar('Please enter a document ID', true);
+    final documentHash = _verifyHashController.text;
+    if (documentHash.isEmpty) {
+      _showSnackBar('Please enter a document hash', true);
       return;
     }
 
-    setState(() => _isVerifying = true);
-
     try {
-      final isVerified = await _documentService.verifyDocument(
-        _documentIdController.text,
-        approved: true, // Set based on your verification logic
-        hash: _documentIdController.text,
-        reason: 'Manual verification', // Set appropriate reason
+      final verified = await widget.documentService.verifyDocument(
+        documentHash,
+        approved: true,
+        reason: 'Document verified',
       );
 
-      final updatedDoc = {
-        'hash': _documentIdController.text,
-        'status': isVerified ? 'Verified' : 'Rejected',
-        'timestamp': DateTime.now().toIso8601String(),
-        'verified': isVerified,
-      };
-
-      setState(() {
-        verificationHistory.insert(0, updatedDoc);
-      });
-
-      _showSnackBar(
-        isVerified ? 'Document verified' : 'Document rejected',
-        !isVerified,
-      );
+      if (verified) {
+        _showSnackBar('Document verified successfully', false);
+        // Optionally refresh document details
+        await _showDocumentDetails(documentHash);
+      } else {
+        _showSnackBar('Verification failed', true);
+      }
     } catch (e) {
-      _showSnackBar('Failed to verify document: ${e.toString()}', true);
-    } finally {
-      setState(() => _isVerifying = false);
+      _showSnackBar('Error verifying document: $e', true);
     }
   }
 
-  Future<void> _showDocumentDetails(String hash) async {
-    setState(() {
-      _isFetching = true;
-      _selectedDocument = null;
-    });
+  Future<void> _showDocumentDetails(String documentHash) async {
+    if (documentHash.isEmpty) {
+      _showSnackBar('Please enter a document hash', true);
+      return;
+    }
 
     try {
-      final details = await _documentService.getDocument(hash);
-      setState(() => _selectedDocument = details);
-
-      showDialog(
-        context: context,
-        builder: (context) => _buildDocumentDialog(details),
-      );
+      final details = await widget.documentService.getDocument(documentHash);
+      
+      if (mounted && details != null) {
+        showDialog(
+          context: context,
+          builder: (context) => _buildDocumentDialog(details),
+        );
+      } else if (mounted) {
+        _showSnackBar('Document not found', true);
+      }
     } catch (e) {
-      _showSnackBar('Failed to fetch document details', true);
-    } finally {
-      setState(() => _isFetching = false);
+      if (mounted) {
+        _showSnackBar('Failed to fetch document details: $e', true);
+      }
     }
   }
 
-  Widget _buildDocumentDialog(Map<String, dynamic> doc) {
+  String _getStatusString(VerificationStatus status) {
+    switch (status) {
+      case VerificationStatus.pending:
+        return 'Pending';
+      case VerificationStatus.approved:
+        return 'Approved';
+      case VerificationStatus.rejected:
+        return 'Rejected';
+    }
+  }
+
+  Widget _buildDocumentDialog(Map<String, dynamic> documentData) {
+    // Convert the raw map to a Document object
+    final document = Document.fromMap(documentData);
+    
     return AlertDialog(
       backgroundColor: const Color(0xFF2C2C2C),
-      title: const Text('Document Details', style: TextStyle(color: Colors.white)),
+      title: const Text(
+        'Document Details',
+        style: TextStyle(color: Colors.white),
+      ),
       content: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildDetailItem('Hash:', doc['hash'] ?? ''),
-            _buildDetailItem('Title:', doc['title'] ?? ''),
-            _buildDetailItem('Owner:', doc['owner']?.toString() ?? ''),
-            _buildDetailItem('Timestamp:',
-                DateTime.tryParse(doc['timestamp']?.toString() ?? '')?.toLocal().toString() ?? ''),
-            _buildDetailItem('Status:',
-                doc['verified'] == true ? 'Verified' : 'Not Verified'),
+            _buildDetailItem('Hash:', document.hash),
+            _buildDetailItem('Title:', document.title),
+            _buildDetailItem('Owner:', document.owner),
+            _buildDetailItem(
+              'Timestamp:',
+              DateTime.fromMillisecondsSinceEpoch(
+                int.parse(document.timestamp) * 1000,
+              ).toString(),
+            ),
+            _buildDetailItem('Status:', _getStatusString(document.status)),
           ],
         ),
       ),
@@ -167,9 +178,10 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
     );
   }
 
-  Widget _buildDetailItem(String label, String value) {
+  Widget _buildDetailItem(String label, String value, {Key? key}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
+      key: key,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -248,98 +260,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1E1E1E),
-      appBar: AppBar(
-        title: const Text(
-          'Document Verification',
-          style: TextStyle(fontSize: 20),
-        ),
-        backgroundColor: const Color(0xFF2C2C2C),
-        actions: const [
-          WalletConnectButton(),
-        ],
-      ),
-      body: Consumer2<WalletService, DocumentService>(
-        builder: (context, walletService, documentService, _) {
-          if (_isLoading) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          if (!walletService.isConnected) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2C2C2C),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.account_balance_wallet,
-                          size: 64,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Connect your wallet to continue',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        const WalletConnectButton(),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return SafeArea(
-            child: CustomScrollView(
-              slivers: [
-                SliverFillRemaining(
-                  hasScrollBody: true,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Upload Section
-                        _buildUploadSection(),
-                        const SizedBox(height: 20),
-                        
-                        // Verification Section
-                        _buildVerificationSection(),
-                        const SizedBox(height: 20),
-                        
-                        // History Section
-                        _buildHistorySection(),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildUploadSection() {
+  Widget _buildUploadSection(DocumentService documentService) {
     return Card(
       color: const Color(0xFF2C2C2C),
       child: Padding(
@@ -382,15 +303,19 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isUploading ? null : _handleUpload,
+                  onPressed: documentService.isUploading ? null : () => _handleUpload(documentService),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: _isUploading
-                      ? const CircularProgressIndicator()
+                  child: documentService.isUploading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Text('Register Document'),
                 ),
               ),
@@ -401,7 +326,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
     );
   }
 
-  Widget _buildVerificationSection() {
+  Widget _buildVerificationSection(DocumentService documentService) {
     return Card(
       color: const Color(0xFF2C2C2C),
       child: Padding(
@@ -419,7 +344,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
             ),
             const SizedBox(height: 16),
             TextFormField(
-              controller: _documentIdController,
+              controller: _verifyHashController,
               decoration: InputDecoration(
                 labelText: 'Document Hash',
                 border: OutlineInputBorder(
@@ -432,7 +357,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _isVerifying ? null : _handleVerification,
+                    onPressed: documentService.isVerifying ? null : _handleVerification,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -440,19 +365,21 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: _isVerifying
-                        ? const CircularProgressIndicator()
+                    child: documentService.isVerifying
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Text('Verify'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
-                      if (_documentIdController.text.isNotEmpty) {
-                        _showDocumentDetails(_documentIdController.text);
-                      }
-                    },
+                    onPressed: documentService.isFetching
+                        ? null
+                        : () => _showDocumentDetails(_verifyHashController.text),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -460,7 +387,13 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text('Details'),
+                    child: documentService.isFetching
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Details'),
                   ),
                 ),
               ],
@@ -491,6 +424,113 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
           itemBuilder: (context, index) => _buildHistoryItem(index),
         ),
       ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer2<DocumentService, WalletService>(
+      builder: (context, documentService, walletService, _) {
+        final isWalletConnected = walletService.isConnected;
+        final errorMessage = documentService.errorMessage;
+        final isLoading = documentService.isLoading;
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Document Verification'),
+            actions: const [
+              WalletConnectButton(),
+            ],
+          ),
+          body: Stack(
+            children: [
+              if (!isWalletConnected)
+                const Center(
+                  child: Text('Please connect your wallet to continue'),
+                )
+              else
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (errorMessage != null)
+                        ErrorBanner(message: errorMessage),
+                      _buildUploadSection(documentService),
+                      const SizedBox(height: 16),
+                      _buildVerificationSection(documentService),
+                      if (verificationHistory.isNotEmpty)
+                        _buildHistorySection(),
+                    ],
+                  ),
+                ),
+              if (isLoading)
+                const LoadingOverlay(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Loading overlay widget
+class LoadingOverlay extends StatelessWidget {
+  const LoadingOverlay({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black54,
+      child: const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Processing...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Error banner widget
+class ErrorBanner extends StatelessWidget {
+  final String message;
+
+  const ErrorBanner({
+    Key? key,
+    required this.message,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(8.0),
+      margin: const EdgeInsets.only(bottom: 16.0),
+      decoration: BoxDecoration(
+        color: Colors.red.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: Colors.red.shade700),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: Colors.red.shade700),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

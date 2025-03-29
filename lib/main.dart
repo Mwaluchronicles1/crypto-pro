@@ -9,39 +9,32 @@ import 'package:crypto_pro/utils/constants.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    // Create services
-    final walletService = WalletService();
-    final documentService = DocumentService(); // Remove the parameter since DocumentService creates its own WalletService
+  final walletService = WalletService();
+  final documentService = DocumentService();
 
-    // Initialize document service
-    await documentService.initialize();
-
-    runApp(
-      MultiProvider(
-        providers: [
-          Provider<WalletService>(create: (_) => walletService),
-          Provider<DocumentService>(create: (_) => documentService),
-        ],
-        child: const MyApp(),
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<WalletService>(create: (_) => walletService),
+        ChangeNotifierProvider<DocumentService>(create: (_) => documentService),
+      ],
+      child: MyApp(
+        documentService: documentService,
+        walletService: walletService,
       ),
-    );
-  } catch (e) {
-    print('Initialization error: $e'); // Add logging for debugging
-    runApp(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: Text('Initialization failed: $e'),
-          ),
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final DocumentService documentService;
+  final WalletService walletService;
+
+  const MyApp({
+    super.key,
+    required this.documentService,
+    required this.walletService,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +42,10 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: AppStrings.appTitle,
       theme: AppTheme.darkTheme,
-      home: const DocumentVerificationScreen(),
+      home: DocumentVerificationScreen(
+        documentService: documentService,
+        walletService: walletService,
+      ),
     );
   }
 }
