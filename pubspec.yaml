@@ -40,7 +40,7 @@ dependencies:
   url_launcher: ^6.1.0
   crypto: ^3.0.0
   shared_preferences: ^2.2.1
-  qr_flutter: ^4.0.0
+
 
 
 
