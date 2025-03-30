@@ -1,94 +1,169 @@
-import 'package:flutter/services.dart';
-import 'package:web3dart/web3dart.dart';
-import 'package:http/http.dart' as http;
-import 'package:web_socket_channel/io.dart';
 import 'dart:convert';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart';
+import 'package:web3dart/web3dart.dart';
+import 'package:flutter/foundation.dart';
+import 'package:crypto_pro/utils/constants.dart';
 
-class ContractService {
-  static const String rpcUrl = 'http://127.0.0.1:7545'; // Ganache RPC URL
-  static const String wsUrl = 'ws://127.0.0.1:7545';
-  static const String privateKey = '0xb4bb9508c8faa1c53a5d8c2a3d0dcaaa1a402100305ce89a88ae82effd86db86'; // Replace with your private key
+class ContractService extends ChangeNotifier {
+  final String _contractAddress;
+  Web3Client? _client;
+  DeployedContract? _contract;
+  ContractFunction? _registerDocument;
+  ContractFunction? _verifyDocument;
+  ContractFunction? _getDocument;
+  bool _isInitialized = false;
+  
+  ContractService({String? contractAddress}) 
+      : _contractAddress = contractAddress ?? ContractConstants.contractAddress;
+  
+  bool get isInitialized => _isInitialized;
 
-  final Web3Client _client;
-  final DeployedContract _contract;
-  late String _abiCode;
-  late EthereumAddress _contractAddress;
-  late Credentials _credentials;
-  late ContractFunction _registerDocument;
-  late ContractFunction _verifyDocument;
-
-  ContractService(this._client, this._contract) {
-    initialSetup();
-  }
-
-  Future<void> initialSetup() async {
-    // Get contract ABI and address
-    await getAbi();
-    await getCredentials();
-  }
-
-  Future<void> getAbi() async {
-    // Read the contract ABI
-    String abiStringFile = await rootBundle.loadString('assets/DocumentVerification.json');
-    _contractAddress = EthereumAddress.fromHex('0x00d96B8ed99E154e676355c553482FD692A97c67'); // Replace with your contract address
-    _abiCode = abiStringFile;
-  }
-
-  Future<void> getCredentials() async {
-    _credentials = EthPrivateKey.fromHex(privateKey);
-  }
-
-  Future<String> registerDocument(String hash, String title) async {
+  Future<void> initialize() async {
     try {
-      // Call the register document function
-      final result = await _client.sendTransaction(
-        _credentials,
-        Transaction.callContract(
-          contract: _contract,
-          function: _registerDocument,
-          parameters: [hash, title],
-        ),
-        chainId: 1337, // Ganache chain ID
+      // Connect to Ethereum node
+      _client = Web3Client(
+        'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161', // Use Sepolia testnet
+        Client(),
       );
-      return result;
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<bool> verifyDocument(String documentId) async {
-    try {
-      // Call the verify document function
-      final result = await _client.call(
-        contract: _contract,
-        function: _verifyDocument,
-        params: [documentId],
-      );
-      return result[0] as bool;
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<List<dynamic>> getDocument(String hash) async {
-    try {
-      // Get the function from the contract
-      final function = _contract.function('getDocument');
       
-      // Call the function
-      final result = await _client.call(
-        contract: _contract,
-        function: function,
+      debugPrint('Initializing contract at address: $_contractAddress');
+      
+      // This would load the actual ABI from assets in a real app
+      const String abiJsonPlaceholder = '''
+      [
+        {
+          "inputs": [
+            {"internalType": "string", "name": "hash", "type": "string"},
+            {"internalType": "string", "name": "metadata", "type": "string"}
+          ],
+          "name": "registerDocument",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {"internalType": "string", "name": "hash", "type": "string"},
+            {"internalType": "bool", "name": "approved", "type": "bool"}
+          ],
+          "name": "verifyDocument",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {"internalType": "string", "name": "hash", "type": "string"}
+          ],
+          "name": "getDocument",
+          "outputs": [
+            {"internalType": "string", "name": "metadata", "type": "string"},
+            {"internalType": "address", "name": "owner", "type": "address"},
+            {"internalType": "uint256", "name": "timestamp", "type": "uint256"},
+            {"internalType": "uint8", "name": "status", "type": "uint8"}
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ]
+      ''';
+      
+      // Initialize contract
+      _contract = DeployedContract(
+        ContractAbi.fromJson(abiJsonPlaceholder, 'DocumentVerification'),
+        EthereumAddress.fromHex(_contractAddress),
+      );
+      
+      // Get functions
+      _registerDocument = _contract!.function('registerDocument');
+      _verifyDocument = _contract!.function('verifyDocument');
+      _getDocument = _contract!.function('getDocument');
+      
+      _isInitialized = true;
+      debugPrint('Contract initialized successfully');
+    } catch (e) {
+      debugPrint('Error initializing contract: $e');
+      rethrow;
+    }
+  }
+  
+  Future<void> registerDocument(String hash, String metadata, Credentials credentials) async {
+    if (!_isInitialized) await initialize();
+    
+    try {
+      await _client!.sendTransaction(
+        credentials,
+        Transaction.callContract(
+          contract: _contract!,
+          function: _registerDocument!,
+          parameters: [hash, metadata],
+        ),
+        chainId: 11155111, // Sepolia chain ID
+      );
+      debugPrint('Document registered on blockchain: $hash');
+    } catch (e) {
+      debugPrint('Error registering document: $e');
+      rethrow;
+    }
+  }
+  
+  Future<void> verifyDocument(String hash, bool approved, Credentials credentials) async {
+    if (!_isInitialized) await initialize();
+    
+    try {
+      await _client!.sendTransaction(
+        credentials,
+        Transaction.callContract(
+          contract: _contract!,
+          function: _verifyDocument!,
+          parameters: [hash, approved],
+        ),
+        chainId: 11155111, // Sepolia chain ID
+      );
+      debugPrint('Document verified on blockchain: $hash (approved: $approved)');
+    } catch (e) {
+      debugPrint('Error verifying document: $e');
+      rethrow;
+    }
+  }
+  
+  Future<Map<String, dynamic>?> getDocument(String hash) async {
+    if (!_isInitialized) await initialize();
+    
+    try {
+      final result = await _client!.call(
+        contract: _contract!,
+        function: _getDocument!,
         params: [hash],
       );
       
-      return result;
+      if (result.isEmpty) return null;
+      
+      // Extract document data from the result
+      final String metadata = result[0].toString();
+      final String owner = (result[1] as EthereumAddress).hex;
+      final BigInt timestamp = result[2] as BigInt;
+      final int status = (result[3] as BigInt).toInt();
+      
+      return {
+        'hash': hash,
+        'title': metadata,
+        'owner': owner,
+        'timestamp': timestamp.toString(),
+        'status': status,
+      };
     } catch (e) {
-      throw Exception('Failed to get document: $e');
+      debugPrint('Error getting document: $e');
+      // We're returning null instead of throwing because this might be a legitimate case
+      // where the document doesn't exist on the blockchain
+      return null;
     }
   }
-
+  
+  @override
   void dispose() {
-    _client.dispose();
+    _client?.dispose();
+    super.dispose();
   }
 }

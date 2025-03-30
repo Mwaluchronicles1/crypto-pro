@@ -1,5 +1,5 @@
 class AppStrings {
-  static const String appTitle = 'Document Verification';  // Add this line
+  static const appTitle = 'Crypto Pro';
   static const String enterDocumentId = 'Please enter a document ID';
   static const String uploadDocument = 'Upload Document';
   static const String verifyDocument = 'Verify Document';
@@ -10,4 +10,7 @@ class AppStrings {
   static const String processing = 'Processing...';
 }
 
-const String CONTRACT_ADDRESS = "0xYourContractAddressHere"; // Replace with your actual contract address
+class ContractConstants {
+  static const contractAddress = '0x1308D78cd4d5Bd15Db18777Ed550926543bEC90C';
+  // Use lower camel case for constants as per Dart style
+}

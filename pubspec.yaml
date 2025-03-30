@@ -36,7 +36,8 @@ dependencies:
   http: ^1.1.0
   web_socket_channel: ^2.4.0
   provider: ^6.0.5
-  walletconnect_dart: ^0.0.11
+  flutter_dotenv: ^5.1.0
+  walletconnect_flutter_v2: ^2.1.4
   url_launcher: ^6.1.0
   crypto: ^3.0.0
   shared_preferences: ^2.2.1

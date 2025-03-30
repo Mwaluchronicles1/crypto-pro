@@ -3,8 +3,20 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart';
 import 'package:web3dart/web3dart.dart';
+import 'package:flutter/foundation.dart';
+
+class Credentials {
+  final String privateKey;
+  
+  Credentials({required this.privateKey});
+}
 
 class ContractService {
+  final String _contractAddress;
+  
+  ContractService({required String contractAddress}) 
+      : _contractAddress = contractAddress;
+      
   late Web3Client _client;
   late DeployedContract _contract;
   late ContractFunction _registerDocument;
@@ -37,6 +49,16 @@ class ContractService {
         parameters: [hash, metadata],
       ),
     );
+  }
+
+  Future<void> loadContract() async {
+    try {
+      debugPrint('Loading contract at address: $_contractAddress');
+      // Contract loading implementation
+    } catch (e) {
+      debugPrint('Error loading contract: $e');
+      rethrow;
+    }
   }
 }
 

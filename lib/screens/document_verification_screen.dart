@@ -3,8 +3,6 @@ import 'package:provider/provider.dart';
 import '../services/wallet_service.dart';
 import '../services/document_service.dart';
 import '../widgets/wallet_connect_button.dart';
-import '../models/verification_status.dart';
-import '../models/document.dart';
 
 class DocumentVerificationScreen extends StatefulWidget {
   final DocumentService documentService;
@@ -67,6 +65,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
         });
         _titleController.clear();
         _hashController.clear();
+        _showSnackBar('Document uploaded successfully', false);
       }
     } catch (e) {
       if (mounted) {
@@ -138,6 +137,8 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
         return 'Approved';
       case VerificationStatus.rejected:
         return 'Rejected';
+      default:
+        return 'Unknown';
     }
   }
 
@@ -181,7 +182,6 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
   Widget _buildDetailItem(String label, String value, {Key? key}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      key: key,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -262,18 +262,17 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
 
   Widget _buildUploadSection(DocumentService documentService) {
     return Card(
-      color: const Color(0xFF2C2C2C),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Register Document',
+                'Upload Document',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
@@ -281,43 +280,35 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
               const SizedBox(height: 16),
               TextFormField(
                 controller: _hashController,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Document Hash',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  border: OutlineInputBorder(),
                 ),
-                validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _titleController,
-                decoration: InputDecoration(
-                  labelText: 'Document Title',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter document hash';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: documentService.isUploading ? null : () => _handleUpload(documentService),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: documentService.isUploading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Register Document'),
+              TextFormField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Document Title',
+                  border: OutlineInputBorder(),
                 ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter document title';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => _handleUpload(documentService),
+                child: const Text('Upload Document'),
               ),
             ],
           ),
@@ -328,16 +319,15 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
 
   Widget _buildVerificationSection(DocumentService documentService) {
     return Card(
-      color: const Color(0xFF2C2C2C),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Verify Document',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
@@ -345,56 +335,22 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
             const SizedBox(height: 16),
             TextFormField(
               controller: _verifyHashController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Document Hash',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: documentService.isVerifying ? null : _handleVerification,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: documentService.isVerifying
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Verify'),
-                  ),
+                ElevatedButton(
+                  onPressed: _handleVerification,
+                  child: const Text('Verify'),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: documentService.isFetching
-                        ? null
-                        : () => _showDocumentDetails(_verifyHashController.text),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: documentService.isFetching
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Details'),
-                  ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () => _showDocumentDetails(_verifyHashController.text),
+                  child: const Text('View Details'),
                 ),
               ],
             ),
@@ -427,6 +383,88 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
     );
   }
 
+  Widget _buildWalletConnectionScreen(WalletService walletService) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(24.0),
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.account_balance_wallet_outlined,
+              size: 64,
+              color: Colors.white54,
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Connect Your Wallet',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Please connect your wallet to access the document verification features.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: () => _handleWalletConnection(walletService),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2196F3),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.link),
+                  SizedBox(width: 8),
+                  Text(
+                    'Connect Wallet',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleWalletConnection(WalletService walletService) async {
+    try {
+      await walletService.connect();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Wallet connected successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to connect wallet: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<DocumentService, WalletService>(
@@ -440,14 +478,13 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
             title: const Text('Document Verification'),
             actions: const [
               WalletConnectButton(),
+              SizedBox(width: 16),
             ],
           ),
           body: Stack(
             children: [
               if (!isWalletConnected)
-                const Center(
-                  child: Text('Please connect your wallet to continue'),
-                )
+                _buildWalletConnectionScreen(walletService)
               else
                 SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
@@ -455,17 +492,31 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (errorMessage != null)
-                        ErrorBanner(message: errorMessage),
+                        Container(
+                          padding: const EdgeInsets.all(8.0),
+                          color: Colors.red,
+                          child: Text(
+                            errorMessage,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
                       _buildUploadSection(documentService),
                       const SizedBox(height: 16),
                       _buildVerificationSection(documentService),
-                      if (verificationHistory.isNotEmpty)
+                      if (verificationHistory.isNotEmpty) ...[
+                        const SizedBox(height: 16),
                         _buildHistorySection(),
+                      ],
                     ],
                   ),
                 ),
               if (isLoading)
-                const LoadingOverlay(),
+                Container(
+                  color: Colors.black54,
+                  child: const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
             ],
           ),
         );
