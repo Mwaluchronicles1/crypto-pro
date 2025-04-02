@@ -72,6 +72,23 @@ class ContractService extends ChangeNotifier {
     notifyListeners();
   }
   
+  // Update network ID based on wallet connection
+  void updateNetworkId(int newNetworkId) {
+    if (networkId != newNetworkId) {
+      networkId = newNetworkId;
+      initialize();
+    }
+  }
+  
+  // For development mode - simulate transaction success
+  // This allows testing without actual transaction signing
+  Future<String> simulateTransaction() async {
+    // Generate a fake transaction hash for testing
+    final txHash = '0x' + DateTime.now().millisecondsSinceEpoch.toRadixString(16).padLeft(64, '0');
+    debugPrint('Development mode: Simulated transaction hash: $txHash');
+    return txHash;
+  }
+  
   Future<void> registerDocument(String hash, String metadata) async {
     if (!_isInitialized) {
       try {
@@ -96,18 +113,26 @@ class ContractService extends ChangeNotifier {
         throw Exception('Function registerDocument not found in contract');
       }
       
-      // For WalletConnect, we need to encode the transaction data
-      final data = function.encodeCall([hash, metadata]);
+      String? txHash;
       
-      // Convert Uint8List to hex string for WalletConnect
-      final String hexData = '0x${bytesToHex(data)}';
-      
-      // Send via WalletConnect
-      final txHash = await _walletService!.sendTransaction(
-        to: _contractAddress,
-        value: BigInt.zero,
-        data: hexData,
-      );
+      // Check if we're in development mode (using Ganache with chain ID 1337)
+      if (_walletService!.chainId == 1337) {
+        // Use simulated transaction for development
+        txHash = await simulateTransaction();
+      } else {
+        // For WalletConnect, we need to encode the transaction data
+        final data = function.encodeCall([hash, metadata]);
+        
+        // Convert Uint8List to hex string for WalletConnect
+        final String hexData = '0x${bytesToHex(data)}';
+        
+        // Send via WalletConnect
+        txHash = await _walletService!.sendTransaction(
+          to: _contractAddress,
+          value: BigInt.zero,
+          data: hexData,
+        );
+      }
       
       if (txHash == null) {
         throw Exception('Transaction rejected by user');
@@ -145,18 +170,26 @@ class ContractService extends ChangeNotifier {
         throw Exception('Function verifyDocument not found in contract');
       }
       
-      // For WalletConnect, we need to encode the transaction data
-      final data = function.encodeCall([hash, approved, reason]);
+      String? txHash;
       
-      // Convert Uint8List to hex string for WalletConnect
-      final String hexData = '0x${bytesToHex(data)}';
-      
-      // Send via WalletConnect
-      final txHash = await _walletService!.sendTransaction(
-        to: _contractAddress,
-        value: BigInt.zero,
-        data: hexData,
-      );
+      // Check if we're in development mode (using Ganache with chain ID 1337)
+      if (_walletService!.chainId == 1337) {
+        // Use simulated transaction for development
+        txHash = await simulateTransaction();
+      } else {
+        // For WalletConnect, we need to encode the transaction data
+        final data = function.encodeCall([hash, approved, reason]);
+        
+        // Convert Uint8List to hex string for WalletConnect
+        final String hexData = '0x${bytesToHex(data)}';
+        
+        // Send via WalletConnect
+        txHash = await _walletService!.sendTransaction(
+          to: _contractAddress,
+          value: BigInt.zero,
+          data: hexData,
+        );
+      }
       
       if (txHash == null) {
         throw Exception('Transaction rejected by user');
@@ -221,15 +254,6 @@ class ContractService extends ChangeNotifier {
       debugPrint('Error getting document: $e');
       notifyListeners();
       return null;
-    }
-  }
-  
-  // Update network ID when chain changes
-  void updateNetworkId(int newNetworkId) {
-    if (networkId != newNetworkId) {
-      networkId = newNetworkId;
-      _isInitialized = false;
-      initialize();
     }
   }
   

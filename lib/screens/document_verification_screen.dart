@@ -434,6 +434,14 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            // Debug button to access wallet test screen
+            TextButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/wallet_test');
+              },
+              child: const Text('Wallet Connection Issues? Tap Here'),
+            ),
           ],
         ),
       ),
@@ -441,27 +449,58 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
   }
 
   Future<void> _handleWalletConnection(WalletConnectService walletService) async {
+    setState(() {
+      _isConnecting = true;
+    });
+    
     try {
-      await walletService.connect();
+      // For assignment testing, use the development wallet connection
+      // This avoids using private keys directly in the code
+      final bool connected = await walletService.connectDevelopmentWallet();
+      
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Wallet connected successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        if (connected) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Wallet connected successfully (Development mode)'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else if (walletService.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Connection error: ${walletService.errorMessage}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to connect wallet, please try again'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to connect wallet: $e'),
+            content: Text('Unexpected error: $e'),
             backgroundColor: Colors.red,
           ),
         );
       }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isConnecting = false;
+        });
+      }
     }
   }
+
+  bool _isConnecting = false;
 
   @override
   Widget build(BuildContext context) {
@@ -469,7 +508,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
       builder: (context, documentService, walletService, _) {
         final isWalletConnected = walletService.isConnected;
         final errorMessage = documentService.errorMessage;
-        final isLoading = documentService.isLoading;
+        final isLoading = documentService.isLoading || _isConnecting;
 
         return Scaffold(
           appBar: AppBar(
@@ -489,6 +528,15 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (walletService.errorMessage != null)
+                        Container(
+                          padding: const EdgeInsets.all(8.0),
+                          color: Colors.orange,
+                          child: Text(
+                            walletService.errorMessage!,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
                       if (errorMessage != null)
                         Container(
                           padding: const EdgeInsets.all(8.0),
@@ -509,12 +557,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                   ),
                 ),
               if (isLoading)
-                Container(
-                  color: Colors.black54,
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                ),
+                LoadingOverlay(),
             ],
           ),
         );

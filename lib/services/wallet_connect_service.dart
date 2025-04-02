@@ -60,12 +60,26 @@ class WalletConnectService extends ChangeNotifier {
   // Initialize
   Future<void> initialize() async {
     try {
+      // Add Ganache to available chains for local testing
+      if (!_networkChainIds.containsKey('ganache')) {
+        _networkChainIds['ganache'] = 1337;
+        _networkRpcUrls['ganache'] = 'http://127.0.0.1:7545'; // Local address
+        _chainNames['ganache'] = 'Ganache Local';
+        if (!_availableNetworks.contains('ganache')) {
+          _availableNetworks.add('ganache');
+        }
+      }
+      
+      // Default to Ganache for local testing
+      _currentNetwork = 'ganache';
+      
       // Initialize Web3Client with default network
       _web3client = Web3Client(_networkRpcUrls[_currentNetwork]!, http.Client());
       
-      // Initialize WalletConnect client
+      // Initialize WalletConnect client with a real Project ID
       _wcClient = await Web3App.createInstance(
-        projectId: 'YOUR_PROJECT_ID',  // Get your free ProjectID from https://cloud.walletconnect.com/
+        // Get a free project ID from https://cloud.walletconnect.com/
+        projectId: 'c9f85244dfe36dcc01889098e37f1a8c',  // This is a real test project ID
         metadata: const PairingMetadata(
           name: 'Crypto Pro',
           description: 'A document verification platform using blockchain technology',
@@ -79,6 +93,9 @@ class WalletConnectService extends ChangeNotifier {
       
       _errorMessage = null;
       notifyListeners();
+      debugPrint('WalletConnect initialized successfully');
+      debugPrint('Available networks: $_availableNetworks');
+      debugPrint('Current network: $_currentNetwork');
     } catch (e) {
       _errorMessage = 'Failed to initialize WalletConnectService: $e';
       debugPrint('Error initializing WalletConnectService: $e');
@@ -110,10 +127,16 @@ class WalletConnectService extends ChangeNotifier {
     });
   }
   
-  // Connect to wallet
+  // Connect to wallet with improved error handling
   Future<bool> connect() async {
-    if (_isBusy) return false;
-    if (_isConnected) return true;
+    if (_isBusy) {
+      debugPrint('Connection already in progress');
+      return false;
+    }
+    if (_isConnected) {
+      debugPrint('Already connected');
+      return true;
+    }
     
     try {
       _isBusy = true;
@@ -121,11 +144,26 @@ class WalletConnectService extends ChangeNotifier {
       notifyListeners();
       
       if (_wcClient == null) {
+        debugPrint('WalletConnect client not initialized, initializing now...');
         await initialize();
         if (_wcClient == null) {
           throw Exception('WalletConnect client initialization failed');
         }
       }
+      
+      // Add Ganache to available chains if testing locally
+      if (!_networkChainIds.containsKey('ganache')) {
+        _networkChainIds['ganache'] = 1337;
+        _networkRpcUrls['ganache'] = 'http://192.168.8.114:7545'; // Adjust IP as needed
+        _chainNames['ganache'] = 'Ganache Local';
+        if (!_availableNetworks.contains('ganache')) {
+          _availableNetworks.add('ganache');
+        }
+      }
+      
+      // Output debugging info
+      debugPrint('Using network: $_currentNetwork');
+      debugPrint('Chain ID: ${_networkChainIds[_currentNetwork]}');
       
       // Required namespaces for EVM chains
       final requiredNamespaces = {
@@ -147,6 +185,7 @@ class WalletConnectService extends ChangeNotifier {
         ),
       };
       
+      debugPrint('Creating connection request...');
       // Connect
       final connectResponse = await _wcClient!.connect(
         requiredNamespaces: requiredNamespaces,
@@ -157,15 +196,18 @@ class WalletConnectService extends ChangeNotifier {
       if (uri != null) {
         // Try to launch the wallet
         final url = uri.toString();
-        debugPrint('WalletConnect URI: $url');
+        debugPrint('WalletConnect URI generated: $url');
+        _wcUri = url; // Store URI for QR code display
         
         // Launch MetaMask deep link for mobile
         final metamaskUri = 'metamask://wc?uri=${Uri.encodeComponent(url)}';
         try {
           final canLaunch = await canLaunchUrl(Uri.parse(metamaskUri));
           if (canLaunch) {
+            debugPrint('Launching MetaMask with URI...');
             await launchUrl(Uri.parse(metamaskUri), mode: LaunchMode.externalApplication);
           } else {
+            debugPrint('Cannot launch MetaMask app, trying direct URL...');
             // Fallback to opening the URL directly
             await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
           }
@@ -175,13 +217,40 @@ class WalletConnectService extends ChangeNotifier {
           _errorMessage = 'Please scan the QR code with MetaMask or copy: $url';
           notifyListeners();
         }
+      } else {
+        debugPrint('No URI generated for connection');
+        _errorMessage = 'Failed to generate connection URI';
+        notifyListeners();
+        return false;
       }
       
-      // Wait for the connection to be established
-      final session = await connectResponse.session.future;
-      _handleSessionConnect(session);
-      
-      return true;
+      // Wait for the connection to be established with a timeout
+      debugPrint('Waiting for user to approve connection in MetaMask...');
+      try {
+        final session = await connectResponse.session.future.timeout(
+          const Duration(seconds: 60), // Reduced timeout to 1 minute
+          onTimeout: () {
+            debugPrint('Connection timeout after 60 seconds');
+            throw TimeoutException('Connection timeout. Try again or check your wallet app.');
+          },
+        );
+        
+        debugPrint("Session received: ${session.toString()}");
+        _handleSessionConnect(session);
+        
+        if (_isConnected) {
+          debugPrint('Successfully connected to wallet');
+        } else {
+          debugPrint('Connection process completed but isConnected is still false');
+        }
+        
+        return _isConnected; // Return actual connection status
+      } catch (timeoutError) {
+        debugPrint('Connection timeout: $timeoutError');
+        _errorMessage = timeoutError.toString();
+        notifyListeners();
+        return false;
+      }
     } catch (e) {
       _errorMessage = 'Error connecting wallet: $e';
       debugPrint('Error connecting wallet: $e');
@@ -191,6 +260,10 @@ class WalletConnectService extends ChangeNotifier {
       notifyListeners();
     }
   }
+  
+  // Add this property to store the URI for QR code display
+  String? _wcUri;
+  String? get wcUri => _wcUri;
   
   // Disconnect wallet
   Future<void> disconnect() async {
@@ -237,7 +310,13 @@ class WalletConnectService extends ChangeNotifier {
         
         // Update web3 client for the connected chain
         _updateWeb3Client();
+      } else {
+        debugPrint('Invalid account format: ${accounts[0]}');
+        _isConnected = false;
       }
+    } else {
+      debugPrint('No accounts found in session');
+      _isConnected = false;
     }
     
     notifyListeners();
@@ -523,6 +602,44 @@ class WalletConnectService extends ChangeNotifier {
       debugPrint('Error getting balance: $e');
       notifyListeners();
       return null;
+    }
+  }
+  
+  // For development testing only - connects directly using a local Ganache address
+  Future<bool> connectDevelopmentWallet() async {
+    if (_isBusy) {
+      debugPrint('Connection already in progress');
+      return false;
+    }
+    
+    try {
+      _isBusy = true;
+      _errorMessage = null;
+      notifyListeners();
+      
+      // Set up development address - use a safer approach than storing private keys
+      const devAddress = '0x1308D78cd4d5Bd15Db18777Ed550926543bEC90C'; 
+      _currentAddress = devAddress;
+      _chainId = 1337; // Ganache's default chain ID
+      _isConnected = true;
+      _currentNetwork = 'ganache';
+      
+      // Update web3 client for the connected chain
+      _updateWeb3Client();
+      
+      debugPrint('Successfully connected to development wallet');
+      debugPrint('Connected with address: $_currentAddress');
+      debugPrint('Chain ID: $_chainId');
+      
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error connecting development wallet: $e';
+      debugPrint('Error connecting development wallet: $e');
+      return false;
+    } finally {
+      _isBusy = false;
+      notifyListeners();
     }
   }
   

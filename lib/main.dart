@@ -7,6 +7,7 @@ import 'package:crypto_pro/services/contract_service.dart';
 import 'package:crypto_pro/screens/document_verification_screen.dart';
 import 'package:crypto_pro/theme/app_theme.dart';
 import 'package:crypto_pro/utils/constants.dart';
+import 'package:crypto_pro/tools/wallet_test.dart';
 
 Future<void> main() async {
   try {
@@ -14,12 +15,27 @@ Future<void> main() async {
     
     // Initialize services
     final walletService = WalletConnectService();
-    await walletService.initialize();
+    
+    // Clear any previous session state and initialize fresh
+    try {
+      await walletService.initialize();
+      debugPrint('WalletConnect service initialized successfully');
+    } catch (walletError) {
+      debugPrint('Non-fatal error initializing WalletConnect: $walletError');
+      // Continue even if wallet service has issues
+    }
     
     final contractService = ContractService(
       walletService: walletService,
     );
-    await contractService.initialize();
+    
+    try {
+      await contractService.initialize();
+      debugPrint('Contract service initialized successfully');
+    } catch (contractError) {
+      debugPrint('Non-fatal error initializing contract service: $contractError');
+      // Continue even if contract service has issues
+    }
     
     final documentService = DocumentService(
       walletService: walletService,
@@ -118,6 +134,9 @@ class MyApp extends StatelessWidget {
           }
         },
       ),
+      routes: {
+        '/wallet_test': (context) => const WalletTestScreen(),
+      },
     );
   }
 }
