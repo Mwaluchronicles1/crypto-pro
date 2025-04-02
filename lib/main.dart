@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:crypto_pro/services/wallet_service.dart';
+import 'package:crypto_pro/services/wallet_connect_service.dart';
 import 'package:crypto_pro/services/document_service.dart';
 import 'package:crypto_pro/services/contract_service.dart';
 import 'package:crypto_pro/screens/document_verification_screen.dart';
@@ -12,23 +12,26 @@ Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     
-    // Load environment variables
-    await dotenv.load(fileName: ".env");
-
-    final walletService = WalletService();
+    // Initialize services
+    final walletService = WalletConnectService();
     await walletService.initialize();
     
-    final contractService = ContractService();
+    final contractService = ContractService(
+      walletService: walletService,
+    );
     await contractService.initialize();
     
-    final documentService = DocumentService(walletService: walletService);
+    final documentService = DocumentService(
+      walletService: walletService,
+      contractService: contractService,
+    );
 
     runApp(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider<WalletService>(create: (_) => walletService),
-          ChangeNotifierProvider<DocumentService>(create: (_) => documentService),
+          ChangeNotifierProvider<WalletConnectService>(create: (_) => walletService),
           ChangeNotifierProvider<ContractService>(create: (_) => contractService),
+          ChangeNotifierProvider<DocumentService>(create: (_) => documentService),
         ],
         child: const MyApp(),
       ),
@@ -36,7 +39,44 @@ Future<void> main() async {
   } catch (e, stackTrace) {
     debugPrint('Error during app initialization: $e');
     debugPrint('Stack trace: $stackTrace');
-    rethrow;
+    // Show error UI instead of crashing
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 64,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Application Error',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'An error occurred during initialization: $e',
+                    style: const TextStyle(color: Colors.white70),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -46,7 +86,13 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final documentService = Provider.of<DocumentService>(context);
-    final walletService = Provider.of<WalletService>(context);
+    final walletService = Provider.of<WalletConnectService>(context);
+    
+    // Sync the chain ID between wallet and contract service
+    if (walletService.isConnected && walletService.chainId != null) {
+      final contractService = Provider.of<ContractService>(context, listen: false);
+      contractService.updateNetworkId(walletService.chainId!);
+    }
     
     return MaterialApp(
       debugShowCheckedModeBanner: false,

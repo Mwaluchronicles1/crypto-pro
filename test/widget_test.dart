@@ -9,22 +9,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:crypto_pro/main.dart';
 import 'package:crypto_pro/services/document_service.dart';
-import 'package:crypto_pro/services/wallet_service.dart';
+import 'package:crypto_pro/services/wallet_connect_service.dart';
 import 'package:crypto_pro/services/contract_service.dart';
 import 'package:provider/provider.dart';
 
 void main() {
   testWidgets('App renders without crashing', (WidgetTester tester) async {
     // Create mock services
-    final walletService = WalletService();
-    final contractService = ContractService();
-    final documentService = DocumentService(walletService: walletService);
+    final walletService = WalletConnectService();
+    final contractService = ContractService(walletService: walletService);
+    final documentService = DocumentService(
+      walletService: walletService,
+      contractService: contractService,
+    );
     
     // Build our app with MultiProvider for all services
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider<WalletService>.value(value: walletService),
+          ChangeNotifierProvider<WalletConnectService>.value(value: walletService),
           ChangeNotifierProvider<ContractService>.value(value: contractService),
           ChangeNotifierProvider<DocumentService>.value(value: documentService),
         ],

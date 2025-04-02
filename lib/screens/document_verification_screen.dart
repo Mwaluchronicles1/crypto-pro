@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../services/wallet_service.dart';
+import '../services/wallet_connect_service.dart';
 import '../services/document_service.dart';
 import '../widgets/wallet_connect_button.dart';
 
 class DocumentVerificationScreen extends StatefulWidget {
   final DocumentService documentService;
-  final WalletService walletService;
+  final WalletConnectService walletService;
 
   const DocumentVerificationScreen({
     super.key,
@@ -144,7 +144,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
 
   Widget _buildDocumentDialog(Map<String, dynamic> documentData) {
     // Convert the raw map to a Document object
-    final document = Document.fromMap(documentData);
+    final document = Document.fromBlockchain(documentData);
     
     return AlertDialog(
       backgroundColor: const Color(0xFF2C2C2C),
@@ -162,11 +162,9 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
             _buildDetailItem('Owner:', document.owner),
             _buildDetailItem(
               'Timestamp:',
-              DateTime.fromMillisecondsSinceEpoch(
-                int.parse(document.timestamp) * 1000,
-              ).toString(),
+              document.timestamp.toString(),
             ),
-            _buildDetailItem('Status:', _getStatusString(document.status)),
+            _buildDetailItem('Status:', document.statusString),
           ],
         ),
       ),
@@ -383,7 +381,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
     );
   }
 
-  Widget _buildWalletConnectionScreen(WalletService walletService) {
+  Widget _buildWalletConnectionScreen(WalletConnectService walletService) {
     return Center(
       child: Container(
         padding: const EdgeInsets.all(24.0),
@@ -442,7 +440,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
     );
   }
 
-  Future<void> _handleWalletConnection(WalletService walletService) async {
+  Future<void> _handleWalletConnection(WalletConnectService walletService) async {
     try {
       await walletService.connect();
       if (mounted) {
@@ -467,7 +465,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<DocumentService, WalletService>(
+    return Consumer2<DocumentService, WalletConnectService>(
       builder: (context, documentService, walletService, _) {
         final isWalletConnected = walletService.isConnected;
         final errorMessage = documentService.errorMessage;

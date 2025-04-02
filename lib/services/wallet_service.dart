@@ -12,25 +12,37 @@ class WalletService extends ChangeNotifier {
   Credentials? _credentials;
   EthereumAddress? _address;
   bool _isConnected = false;
+  String? _errorMessage;
 
   String? get currentAddress => _address?.hex;
   bool get isConnected => _isConnected;
   Credentials? get credentials => _credentials;
+  String? get errorMessage => _errorMessage;
 
   Future<void> initialize() async {
     try {
       final infuraUrl = 'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161';
       _ethClient = Web3Client(infuraUrl, http.Client());
+      _errorMessage = null;
       notifyListeners();
     } catch (e) {
+      _errorMessage = 'Failed to initialize WalletService: $e';
       debugPrint('Error initializing WalletService: $e');
-      rethrow;
+      notifyListeners();
+      // Do not rethrow - just log and continue
     }
   }
 
-  Future<void> connect() async {
+  Future<bool> connect() async {
     try {
-      if (_ethClient == null) await initialize();
+      if (_ethClient == null) {
+        await initialize();
+        if (_ethClient == null) {
+          _errorMessage = 'Failed to initialize Web3 client';
+          notifyListeners();
+          return false;
+        }
+      }
       
       // In a real app, get the private key from secure storage
       // For demo purposes, we're using a hardcoded private key or .env file
@@ -41,13 +53,17 @@ class WalletService extends ChangeNotifier {
       _credentials = EthPrivateKey.fromHex(_privateKey!);
       _address = await _credentials!.extractAddress();
       _isConnected = true;
+      _errorMessage = null;
       
       notifyListeners();
       debugPrint('Wallet connected: ${_address?.hex}');
+      return true;
     } catch (e) {
       _isConnected = false;
+      _errorMessage = 'Failed to connect wallet: $e';
       debugPrint('Error connecting wallet: $e');
-      rethrow;
+      notifyListeners();
+      return false;
     }
   }
 
@@ -59,23 +75,29 @@ class WalletService extends ChangeNotifier {
     debugPrint('Wallet disconnected');
   }
 
-  Future<String> getBalance() async {
+  Future<String?> getBalance() async {
     if (!_isConnected || _ethClient == null || _address == null) {
-      throw Exception('Wallet not connected');
+      _errorMessage = 'Wallet not connected';
+      notifyListeners();
+      return null;
     }
 
     try {
       final balance = await _ethClient!.getBalance(_address!);
       return balance.getValueInUnit(EtherUnit.ether).toString();
     } catch (e) {
+      _errorMessage = 'Failed to get balance: $e';
       debugPrint('Error getting balance: $e');
-      rethrow;
+      notifyListeners();
+      return null;
     }
   }
   
-  Future<String> signMessage(String message) async {
+  Future<String?> signMessage(String message) async {
     if (!_isConnected || _credentials == null) {
-      throw Exception('Wallet not connected');
+      _errorMessage = 'Wallet not connected';
+      notifyListeners();
+      return null;
     }
     
     try {
@@ -83,8 +105,10 @@ class WalletService extends ChangeNotifier {
       final signature = await _credentials!.signPersonalMessage(messageBytes);
       return '0x${hex.encode(signature)}';
     } catch (e) {
+      _errorMessage = 'Failed to sign message: $e';
       debugPrint('Error signing message: $e');
-      rethrow;
+      notifyListeners();
+      return null;
     }
   }
   
