@@ -176,6 +176,7 @@ class _WalletConnectButtonState extends State<WalletConnectButton> {
         final address = walletService.currentAddress;
         final chainName = walletService.currentNetwork;
         final errorMessage = walletService.errorMessage;
+        final isGanache = walletService.chainId == 1337;
         
         // If there's an error message and we're not connecting, show it on hover
         Widget connectionButton = TextButton(
@@ -186,7 +187,7 @@ class _WalletConnectButtonState extends State<WalletConnectButton> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             side: BorderSide(
               color: connected 
-                  ? Colors.green.withAlpha(200) 
+                  ? (isGanache ? Colors.green.withAlpha(200) : Colors.orange.withAlpha(200)) 
                   : (errorMessage != null ? Colors.orange.withAlpha(200) : Colors.grey.withAlpha(200)),
               width: 1,
             ),
@@ -217,21 +218,21 @@ class _WalletConnectButtonState extends State<WalletConnectButton> {
                   children: [
                     Icon(
                       connected 
-                          ? Icons.link 
+                          ? (isGanache ? Icons.link : Icons.warning)
                           : (errorMessage != null ? Icons.error_outline : Icons.link_off),
                       color: connected 
-                          ? Colors.green 
+                          ? (isGanache ? Colors.green : Colors.orange)
                           : (errorMessage != null ? Colors.orange : Colors.grey),
                       size: 20,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       connected 
-                          ? '${_shortenAddress(address ?? '')} ($chainName)'
+                          ? '${_shortenAddress(address ?? '')} (${isGanache ? 'Ganache' : chainName})'
                           : 'Connect Wallet',
                       style: TextStyle(
                         color: connected 
-                            ? Colors.green 
+                            ? (isGanache ? Colors.green : Colors.orange)
                             : (errorMessage != null ? Colors.orange : Colors.grey),
                       ),
                     ),
@@ -254,6 +255,14 @@ class _WalletConnectButtonState extends State<WalletConnectButton> {
                 borderRadius: BorderRadius.circular(20),
               ),
             ),
+          );
+        }
+        
+        // Add warning if connected but not to Ganache
+        if (connected && !isGanache) {
+          return Tooltip(
+            message: 'Warning: Connected to ${chainName} instead of Ganache. Please switch to Ganache in MetaMask.',
+            child: connectionButton,
           );
         }
         

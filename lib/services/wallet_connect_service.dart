@@ -11,8 +11,8 @@ class WalletConnectService extends ChangeNotifier {
   String? _currentAddress;
   int? _chainId;
   String? _errorMessage;
-  final List<String> _availableNetworks = ['ethereum', 'sepolia', 'polygon', 'binance'];
-  String _currentNetwork = 'sepolia';
+  final List<String> _availableNetworks = ['ganache', 'ethereum', 'sepolia', 'polygon', 'binance'];
+  String _currentNetwork = 'ganache'; // Default to Ganache
   
   // Chain Names (Human readable)
   final Map<String, String> _chainNames = {
@@ -20,6 +20,7 @@ class WalletConnectService extends ChangeNotifier {
     'sepolia': 'Sepolia Testnet',
     'polygon': 'Polygon',
     'binance': 'BNB Chain',
+    'ganache': 'Ganache Local',
   };
 
   // Chain IDs
@@ -28,6 +29,7 @@ class WalletConnectService extends ChangeNotifier {
     'sepolia': 11155111,
     'polygon': 137,
     'binance': 56,
+    'ganache': 1337,
   };
   
   // Network RPC URLs
@@ -36,6 +38,7 @@ class WalletConnectService extends ChangeNotifier {
     'sepolia': 'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
     'polygon': 'https://polygon-rpc.com',
     'binance': 'https://bsc-dataseed.binance.org/',
+    'ganache': 'http://127.0.0.1:7545', // Local Ganache
   };
   
   // WalletConnect V2 Web3Wallet
@@ -60,21 +63,8 @@ class WalletConnectService extends ChangeNotifier {
   // Initialize
   Future<void> initialize() async {
     try {
-      // Add Ganache to available chains for local testing
-      if (!_networkChainIds.containsKey('ganache')) {
-        _networkChainIds['ganache'] = 1337;
-        _networkRpcUrls['ganache'] = 'http://127.0.0.1:7545'; // Local address
-        _chainNames['ganache'] = 'Ganache Local';
-        if (!_availableNetworks.contains('ganache')) {
-          _availableNetworks.add('ganache');
-        }
-      }
-      
-      // Default to Ganache for local testing
-      _currentNetwork = 'ganache';
-      
-      // Initialize Web3Client with default network
-      _web3client = Web3Client(_networkRpcUrls[_currentNetwork]!, http.Client());
+      // Initialize Web3Client with default Ganache network
+      _web3client = Web3Client(_networkRpcUrls['ganache']!, http.Client());
       
       // Initialize WalletConnect client with a real Project ID
       _wcClient = await Web3App.createInstance(
@@ -95,7 +85,7 @@ class WalletConnectService extends ChangeNotifier {
       notifyListeners();
       debugPrint('WalletConnect initialized successfully');
       debugPrint('Available networks: $_availableNetworks');
-      debugPrint('Current network: $_currentNetwork');
+      debugPrint('Current network: $_currentNetwork (Chain ID: ${_networkChainIds[_currentNetwork]})');
     } catch (e) {
       _errorMessage = 'Failed to initialize WalletConnectService: $e';
       debugPrint('Error initializing WalletConnectService: $e');
@@ -151,15 +141,8 @@ class WalletConnectService extends ChangeNotifier {
         }
       }
       
-      // Add Ganache to available chains if testing locally
-      if (!_networkChainIds.containsKey('ganache')) {
-        _networkChainIds['ganache'] = 1337;
-        _networkRpcUrls['ganache'] = 'http://192.168.8.114:7545'; // Adjust IP as needed
-        _chainNames['ganache'] = 'Ganache Local';
-        if (!_availableNetworks.contains('ganache')) {
-          _availableNetworks.add('ganache');
-        }
-      }
+      // Ensure we're using Ganache
+      _currentNetwork = 'ganache';
       
       // Output debugging info
       debugPrint('Using network: $_currentNetwork');
@@ -185,7 +168,7 @@ class WalletConnectService extends ChangeNotifier {
         ),
       };
       
-      debugPrint('Creating connection request...');
+      debugPrint('Creating connection request for Ganache (Chain ID: ${_networkChainIds[_currentNetwork]})...');
       // Connect
       final connectResponse = await _wcClient!.connect(
         requiredNamespaces: requiredNamespaces,
@@ -240,6 +223,12 @@ class WalletConnectService extends ChangeNotifier {
         
         if (_isConnected) {
           debugPrint('Successfully connected to wallet');
+          // Verify we're on Ganache
+          if (_chainId != 1337) {
+            _errorMessage = 'Connected to chain ${_chainId} but expected Ganache (1337). Please switch networks in MetaMask.';
+            debugPrint(_errorMessage!);
+            notifyListeners();
+          }
         } else {
           debugPrint('Connection process completed but isConnected is still false');
         }
@@ -617,17 +606,19 @@ class WalletConnectService extends ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
       
+      // Ensure we're using Ganache
+      _currentNetwork = 'ganache';
+      
       // Set up development address - use a safer approach than storing private keys
       const devAddress = '0x1308D78cd4d5Bd15Db18777Ed550926543bEC90C'; 
       _currentAddress = devAddress;
       _chainId = 1337; // Ganache's default chain ID
       _isConnected = true;
-      _currentNetwork = 'ganache';
       
       // Update web3 client for the connected chain
       _updateWeb3Client();
       
-      debugPrint('Successfully connected to development wallet');
+      debugPrint('Successfully connected to development wallet (Ganache)');
       debugPrint('Connected with address: $_currentAddress');
       debugPrint('Chain ID: $_chainId');
       

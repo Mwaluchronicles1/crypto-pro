@@ -36,17 +36,40 @@ class Document {
 
   // Create from blockchain data
   factory Document.fromBlockchain(Map<String, dynamic> data) {
+    // Convert timestamp to DateTime - handling both String and int types
+    DateTime parseTimestamp(dynamic timestamp) {
+      if (timestamp is int) {
+        return DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+      } else if (timestamp is String) {
+        // Check if the string is a number
+        if (int.tryParse(timestamp) != null) {
+          return DateTime.fromMillisecondsSinceEpoch(int.parse(timestamp) * 1000);
+        } else {
+          // If it's an ISO formatted date string
+          try {
+            return DateTime.parse(timestamp);
+          } catch (e) {
+            debugPrint('Error parsing timestamp: $e');
+            return DateTime.now();
+          }
+        }
+      } else {
+        debugPrint('Unexpected timestamp type: ${timestamp.runtimeType}');
+        return DateTime.now();
+      }
+    }
+
     return Document(
-      hash: data['hash'] as String,
-      title: data['title'] as String,
-      owner: data['owner'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(
-        int.parse(data['timestamp']) * 1000,
-      ),
-      exists: data['exists'] as bool,
-      status: VerificationStatus.values[data['status'] as int],
-      verifiers: (data['verifiers'] as List<dynamic>?)?.cast<String>(),
-      rejectionReason: data['rejectionReason'] as String?,
+      hash: data['hash'].toString(),
+      title: data['title'].toString(),
+      owner: data['owner'].toString(),
+      timestamp: parseTimestamp(data['timestamp']),
+      exists: data['exists'] as bool? ?? true,
+      status: data['status'] is int 
+          ? VerificationStatus.values[data['status'] as int] 
+          : VerificationStatus.values[int.tryParse(data['status'].toString()) ?? 0],
+      verifiers: (data['verifiers'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      rejectionReason: data['rejectionReason']?.toString(),
     );
   }
 
@@ -316,7 +339,7 @@ class DocumentService extends ChangeNotifier {
             'hash': documentHash,
             'title': 'Sample Document',
             'owner': _walletService.currentAddress ?? 'Unknown',
-            'timestamp': (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString(),
+            'timestamp': DateTime.now().millisecondsSinceEpoch ~/ 1000,
             'status': VerificationStatus.pending.index,
             'exists': true,
             'verifiers': [],

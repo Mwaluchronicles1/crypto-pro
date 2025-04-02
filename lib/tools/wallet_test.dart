@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:crypto_pro/services/wallet_connect_service.dart';
 import 'package:provider/provider.dart';
+import 'package:crypto_pro/utils/network_config.dart';
 
 /// Test screen for debugging wallet connection issues
 class WalletTestScreen extends StatefulWidget {
@@ -51,6 +52,39 @@ class _WalletTestScreenState extends State<WalletTestScreen> {
                         'Error: ${walletService.errorMessage}',
                         style: const TextStyle(color: Colors.red),
                       ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'MetaMask Network',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => NetworkConfig.addGanacheToMetaMask(context),
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('Add Ganache to MetaMask'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.indigo,
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'If MetaMask is not connecting to the correct network, use this button to add Ganache.',
+                      style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+                    ),
                   ],
                 ),
               ),

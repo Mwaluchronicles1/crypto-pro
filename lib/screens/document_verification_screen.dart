@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/wallet_connect_service.dart';
 import '../services/document_service.dart';
 import '../widgets/wallet_connect_button.dart';
+import '../utils/network_config.dart';
 
 class DocumentVerificationScreen extends StatefulWidget {
   final DocumentService documentService;
@@ -388,6 +389,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
         constraints: const BoxConstraints(maxWidth: 400),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
               Icons.account_balance_wallet_outlined,
@@ -402,6 +404,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             const Text(
@@ -413,25 +416,40 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
               ),
             ),
             const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () => _handleWalletConnection(walletService),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2196F3),
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => _handleWalletConnection(walletService),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2196F3),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Connect Wallet',
+                  style: TextStyle(fontSize: 16),
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.link),
-                  SizedBox(width: 8),
-                  Text(
-                    'Connect Wallet',
-                    style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => NetworkConfig.addGanacheToMetaMask(context),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  side: const BorderSide(color: Color(0xFF2196F3)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
+                ),
+                child: const Text(
+                  'Add Ganache to MetaMask',
+                  style: TextStyle(fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -454,25 +472,32 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
     });
     
     try {
-      // For assignment testing, use the development wallet connection
-      // This avoids using private keys directly in the code
-      final bool connected = await walletService.connectDevelopmentWallet();
+      // Try to use real MetaMask connection first
+      final bool connected = await walletService.connect();
       
       if (mounted) {
         if (connected) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Wallet connected successfully (Development mode)'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          // Check if connected to Ganache
+          if (walletService.chainId == 1337) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Connected to Ganache successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          } else {
+            // Wrong network warning
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Connected to ${walletService.currentNetwork} instead of Ganache. Please switch networks in MetaMask.'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
         } else if (walletService.errorMessage != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Connection error: ${walletService.errorMessage}'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          // If MetaMask connection fails, try fallback to development mode
+          await _tryDevelopmentFallback(walletService);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -490,12 +515,38 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
             backgroundColor: Colors.red,
           ),
         );
+        // Try development fallback as last resort
+        await _tryDevelopmentFallback(walletService);
       }
     } finally {
       if (mounted) {
         setState(() {
           _isConnecting = false;
         });
+      }
+    }
+  }
+  
+  // Try to connect using development wallet as fallback
+  Future<void> _tryDevelopmentFallback(WalletConnectService walletService) async {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('MetaMask connection failed. Using development mode as fallback...'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+      
+      // Try development wallet as fallback
+      final bool devConnected = await walletService.connectDevelopmentWallet();
+      
+      if (mounted && devConnected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Connected using development mode'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     }
   }

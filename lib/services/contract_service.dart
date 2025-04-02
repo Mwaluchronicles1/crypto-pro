@@ -243,7 +243,7 @@ class ContractService extends ChangeNotifier {
         'hash': resultHash,
         'title': title,
         'owner': owner.hex,
-        'timestamp': timestamp.toString(),
+        'timestamp': timestamp.toInt(),
         'exists': exists,
         'status': status,
         'verifiers': verifiers.map((v) => (v as EthereumAddress).hex).toList(),
